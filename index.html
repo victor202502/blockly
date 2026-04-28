@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SPIKE Pi - Master Edition (Sincronizado)</title>
+  <script src="https://unpkg.com/blockly/blockly_compressed.js"></script>
+  <script src="https://unpkg.com/blockly/blocks_compressed.js"></script>
+  <script src="https://unpkg.com/blockly/python_compressed.js"></script>
+  <script src="https://unpkg.com/blockly/msg/es.js"></script>
+  
+  <style>
+    :root {
+      --spike-yellow: #FFD500;
+      --spike-dark: #231F20;
+      --spike-green: #00A95C;
+    }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: var(--spike-dark); color: white; }
+    
+    header { 
+      background: var(--spike-yellow); 
+      padding: 10px 20px; 
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between; 
+      color: black;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+
+    #main { display: flex; flex: 1; overflow: hidden; background: #f0f0f0; }
+    #blocklyDiv { flex: 2; border-right: 2px solid #ccc; }
+    
+    #sidePanel { flex: 1; display: flex; flex-direction: column; background: #1e1e1e; }
+    #codeContainer { flex: 1; padding: 15px; overflow: auto; font-family: 'Consolas', monospace; font-size: 12px; color: #d4d4d4; }
+    #console { height: 150px; background: #000; padding: 10px; border-top: 2px solid #444; color: #0f0; font-family: monospace; overflow-y: auto; }
+
+    .controls { display: flex; gap: 10px; align-items: center; }
+    input { padding: 8px; border-radius: 20px; border: none; text-align: center; font-weight: bold; }
+    
+    .btn { cursor: pointer; padding: 10px 20px; border: none; border-radius: 20px; font-weight: bold; transition: 0.2s; text-transform: uppercase; }
+    .btn-run { background: var(--spike-green); color: white; }
+    .btn-stop { background: #E30613; color: white; }
+    .btn:hover { transform: scale(1.05); opacity: 0.9; }
+
+    .label-tag { font-size: 0.7em; font-weight: bold; margin-right: 5px; color: #666; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div style="display: flex; align-items: center; gap: 15px;">
+    <div style="font-size: 1.8em; font-weight: 900;">SPIKE <span style="font-weight: 100;">Pi</span></div>
+    <div style="background: black; color: white; padding: 4px 12px; border-radius: 15px; font-size: 0.8em;">CONECTADO</div>
+  </div>
+  
+  <div class="controls">
+    <span class="label-tag">IP ROBOT:</span>
+    <input type="text" id="pi_ip" value="192.168.2.250">
+    <button class="btn btn-run" onclick="enviarAPi()">▶ Iniciar</button>
+    <button class="btn btn-stop" onclick="detenerRobot()">■ Parar</button>
+  </div>
+</header>
+
+<div id="main">
+  <div id="blocklyDiv"></div>
+  <div id="sidePanel">
+    <div id="codeContainer">
+      <div style="color: var(--spike-yellow); margin-bottom: 8px;">// CÓDIGO PYTHON GENERADO (PRECISIÓN PRO)</div>
+      <pre id="pythonCode"></pre>
+    </div>
+    <div id="console">
+      > Consola del sistema lista...
+    </div>
+  </div>
+</div>
+
+<xml id="toolbox" style="display: none">
+  <category name="Movimiento" colour="230">
+    <block type="motores_dual">
+        <field name="SPEED">5</field>
+    </block>
+    <block type="motores_giro"></block>
+    <block type="motor_individual"></block>
+    <block type="motor_stop"></block>
+  </category>
+  <category name="Sensores" colour="60">
+    <block type="sensor_distancia"></block>
+    <block type="esperar_distancia"></block>
+  </category>
+  <category name="Control" colour="120">
+    <block type="base_delay"></block>
+    <block type="controls_repeat_ext">
+      <value name="TIMES"><shadow type="math_number"><field name="NUM">3</field></shadow></value>
+    </block>
+    <block type="controls_if"></block>
+    <block type="controls_whileUntil"></block>
+  </category>
+  <category name="Sonido y Luz" colour="300">
+    <block type="print_console"></block>
+  </category>
+  <category name="Variables" colour="330" custom="VARIABLE"></category>
+</xml>
+
+<script>
+/* --- DEFINICIÓN DE BLOQUES --- */
+Blockly.defineBlocksWithJsonArray([
+  {
+    "type": "motor_individual",
+    "message0": "Motor %1 girar %2 a velocidad %3 durante %4 %5",
+    "args0": [
+      { "type": "field_dropdown", "name": "ID", "options": [["A","0"], ["B","1"]] },
+      { "type": "field_dropdown", "name": "DIR", "options": [["↻ adelante","forward"], ["↺ atrás","backward"]] },
+      { "type": "field_number", "name": "SPEED", "value": 5, "min": 1, "max": 10 },
+      { "type": "field_number", "name": "VALOR", "value": 1 },
+      { "type": "field_dropdown", "name": "MODO", "options": [["vueltas","VUELTAS"], ["segundos","SEG"]] }
+    ],
+    "previousStatement": null, "nextStatement": null, "colour": 230
+  },
+  {
+    "type": "motores_dual",
+    "message0": "Mover A+B %1 a velocidad %2 por %3 %4",
+    "args0": [
+      { "type": "field_dropdown", "name": "DIR", "options": [["↑ adelante","forward"], ["↓ atrás","backward"]] },
+      { "type": "field_number", "name": "SPEED", "value": 5, "min": 1, "max": 10 },
+      { "type": "field_number", "name": "VALOR", "value": 2 },
+      { "type": "field_dropdown", "name": "MODO", "options": [["vueltas","VUELTAS"], ["segundos","SEG"]] }
+    ],
+    "previousStatement": null, "nextStatement": null, "colour": 230
+  },
+  {
+    "type": "motores_giro",
+    "message0": "Girar %1 %2 vueltas (vel: %3)",
+    "args0": [
+      { "type": "field_dropdown", "name": "SENTIDO", "options": [["↪ Derecha","derecha"], ["↩ Izquierda","izquierda"]] },
+      { "type": "field_number", "name": "VUELTAS", "value": 1 },
+      { "type": "field_number", "name": "SPEED", "value": 4, "min": 1, "max": 10 }
+    ],
+    "previousStatement": null, "nextStatement": null, "colour": 230
+  },
+  { "type": "sensor_distancia", "message0": "distancia (cm)", "output": "Number", "colour": 60 },
+  {
+    "type": "esperar_distancia",
+    "message0": "esperar hasta que distancia < %1 cm",
+    "args0": [{ "type": "field_number", "name": "DIST", "value": 10 }],
+    "previousStatement": null, "nextStatement": null, "colour": 60
+  },
+  { "type": "motor_stop", "message0": "Detener Movimiento", "previousStatement": null, "nextStatement": null, "colour": 0 },
+  {
+    "type": "base_delay",
+    "message0": "esperar %1 seg",
+    "args0": [{ "type": "field_number", "name": "SEC", "value": 1 }],
+    "previousStatement": null, "nextStatement": null, "colour": 120
+  },
+  {
+    "type": "print_console",
+    "message0": "escribir en consola %1",
+    "args0": [{ "type": "field_input", "name": "TEXT", "text": "Hola Spike!" }],
+    "previousStatement": null, "nextStatement": null, "colour": 300
+  }
+]);
+
+const pyGen = Blockly.Python;
+
+/* --- GENERADORES --- */
+pyGen.forBlock['motor_individual'] = function(block) {
+  return `robot_motor_maestro(${block.getFieldValue('ID')}, '${block.getFieldValue('DIR')}', ${block.getFieldValue('VALOR')}, '${block.getFieldValue('MODO')}', ${block.getFieldValue('SPEED')})\n`;
+};
+pyGen.forBlock['motores_dual'] = function(block) {
+  return `robot_dual_maestro('${block.getFieldValue('DIR')}', ${block.getFieldValue('VALOR')}, '${block.getFieldValue('MODO')}', ${block.getFieldValue('SPEED')})\n`;
+};
+pyGen.forBlock['motores_giro'] = function(block) {
+  return `robot_girar_maestro('${block.getFieldValue('SENTIDO')}', ${block.getFieldValue('VUELTAS')}, ${block.getFieldValue('SPEED')})\n`;
+};
+pyGen.forBlock['motor_stop'] = function() { return "driver.MotorStop(0)\ndriver.MotorStop(1)\n"; };
+pyGen.forBlock['base_delay'] = function(block) { return `time.sleep(${block.getFieldValue('SEC')})\n`; };
+pyGen.forBlock['sensor_distancia'] = function() { return ["get_distancia()", pyGen.ORDER_ATOMIC]; };
+pyGen.forBlock['esperar_distancia'] = function(block) { return `while get_distancia() > ${block.getFieldValue('DIST')}: time.sleep(0.05)\n`; };
+pyGen.forBlock['print_console'] = function(block) { return `print("${block.getFieldValue('TEXT')}")\n`; };
+
+const workspace = Blockly.inject('blocklyDiv', { 
+    toolbox: document.getElementById('toolbox'),
+    zoom: { controls: true, wheel: true },
+    trashcan: true 
+});
+
+/* --- LÓGICA DE ACTUALIZACIÓN DE CÓDIGO --- */
+function updateCode() {
+  let header = `from MotorDriver import MotorDriver
+from gpiozero import RotaryEncoder, DistanceSensor
+import time
+
+# --- CONFIGURACIÓN SPIKE PI ---
+driver = MotorDriver()
+enc_a = RotaryEncoder(16, 17, max_steps=0)
+enc_b = RotaryEncoder(5, 6, max_steps=0)
+
+PULSOS_POR_VUELTA = 1473.15
+RAMPA_PULSOS = 450   # Distancia antes de frenar
+POTENCIA_MIN = 30    # Potencia mínima para que el robot no se cale
+KP_SYNC = 0.15       # Sensibilidad para ir recto (ajustar si hace eses)
+
+def map_speed(spike_speed):
+    return int(30 + (spike_speed - 1) * (70 / 9))
+
+def robot_motor_maestro(id, dir, valor, modo, spike_speed):
+    potencia_max = map_speed(spike_speed)
+    if modo == 'SEG':
+        driver.MotorRun(id, dir, potencia_max)
+        time.sleep(valor)
+        driver.MotorStop(id)
+        return
+    enc = enc_a if id == 0 else enc_b
+    enc.steps = 0
+    objetivo = int(valor * PULSOS_POR_VUELTA)
+    while True:
+        actual = abs(enc.steps)
+        restante = objetivo - actual
+        if restante <= 0: break
+        potencia = potencia_max
+        if restante < RAMPA_PULSOS:
+            factor = restante / RAMPA_PULSOS
+            potencia = int(POTENCIA_MIN + (potencia_max - POTENCIA_MIN) * factor)
+        driver.MotorRun(id, dir, max(potencia, POTENCIA_MIN))
+        time.sleep(0.005)
+    driver.MotorStop(id)
+
+def robot_dual_maestro(dir, valor, modo, spike_speed):
+    potencia_base = map_speed(spike_speed)
+    dir_a = 'forward' if dir == 'forward' else 'backward'
+    dir_b = 'backward' if dir == 'forward' else 'forward'
+    
+    if modo == 'SEG':
+        driver.MotorRun(0, dir_a, potencia_base); driver.MotorRun(1, dir_b, potencia_base)
+        time.sleep(valor)
+        driver.MotorStop(0); driver.MotorStop(1)
+        return
+
+    enc_a.steps = enc_b.steps = 0
+    objetivo = int(valor * PULSOS_POR_VUELTA)
+    
+    while True:
+        pasos_a = abs(enc_a.steps)
+        pasos_b = abs(enc_b.steps)
+        actual = (pasos_a + pasos_b) / 2
+        restante = objetivo - actual
+        
+        if restante <= 0: break
+        
+        # 1. Calcular Potencia por Rampa
+        potencia_actual = potencia_base
+        if restante < RAMPA_PULSOS:
+            factor = restante / RAMPA_PULSOS
+            potencia_actual = int(POTENCIA_MIN + (potencia_base - POTENCIA_MIN) * factor)
+        
+        # 2. Sincronización para ir recto
+        # Comparamos A y B. Si A es mayor, el error es positivo.
+        error = pasos_a - pasos_b
+        correccion = int(error * KP_SYNC)
+        
+        pot_a = potencia_actual - correccion
+        pot_b = potencia_actual + correccion
+        
+        # Aplicar límites de seguridad 0-100
+        pot_a = max(min(pot_a, 100), 10)
+        pot_b = max(min(pot_b, 100), 10)
+        
+        driver.MotorRun(0, dir_a, pot_a)
+        driver.MotorRun(1, dir_b, pot_b)
+        time.sleep(0.01)
+
+    driver.MotorStop(0); driver.MotorStop(1)
+
+def robot_girar_maestro(sentido, vueltas, spike_speed):
+    potencia_max = map_speed(spike_speed)
+    da = 'forward' if sentido == 'derecha' else 'backward'
+    db = 'forward' if sentido == 'derecha' else 'backward'
+    enc_a.steps = enc_b.steps = 0
+    objetivo = int(vueltas * (PULSOS_POR_VUELTA * 0.5))
+    
+    while True:
+        actual = (abs(enc_a.steps) + abs(enc_b.steps)) / 2
+        restante = objetivo - actual
+        if restante <= 0: break
+        potencia = potencia_max
+        if restante < (RAMPA_PULSOS / 2):
+            factor = restante / (RAMPA_PULSOS / 2)
+            potencia = int(POTENCIA_MIN + (potencia_max - POTENCIA_MIN) * factor)
+        driver.MotorRun(0, da, max(potencia, POTENCIA_MIN))
+        driver.MotorRun(1, db, max(potencia, POTENCIA_MIN))
+        time.sleep(0.005)
+    driver.MotorStop(0); driver.MotorStop(1)
+
+print("Robot SPIKE Pi iniciado con Corrección de Deriva...")
+try:
+`;
+  let body = pyGen.workspaceToCode(workspace);
+  body = !body.trim() ? "    pass\n" : body.split('\n').map(l => l.trim() ? "    " + l : "").join('\n');
+  let footer = `\nfinally:\n    driver.MotorStop(0); driver.MotorStop(1)\n    print("Programa finalizado.")`;
+  document.getElementById('pythonCode').innerText = header + body + footer;
+}
+
+workspace.addChangeListener(updateCode);
+updateCode();
+
+/* --- COMUNICACIÓN --- */
+async function enviarAPi() {
+  const ip = document.getElementById('pi_ip').value;
+  const codigo = document.getElementById('pythonCode').innerText;
+  log(`Enviando a ${ip}...`);
+  try {
+    const res = await fetch(`http://${ip}:5000/run`, { 
+        method: 'POST', 
+        headers: {'Content-Type': 'application/json'}, 
+        body: JSON.stringify({code: codigo}) 
+    });
+    const data = await res.text();
+    log("Respuesta Pi: " + data);
+  } catch (e) { log("Error: No se pudo conectar."); }
+}
+
+async function detenerRobot() {
+    const ip = document.getElementById('pi_ip').value;
+    log("Parada de emergencia...");
+    try { await fetch(`http://${ip}:5000/stop`, { method: 'POST' }); } catch (e) { log("Error."); }
+}
+
+function log(msg) {
+    const con = document.getElementById('console');
+    con.innerHTML += `<div>> ${msg}</div>`;
+    con.scrollTop = con.scrollHeight;
+}
+</script>
+</body>
+</html>
