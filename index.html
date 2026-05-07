@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>SPIKE Pi - Master Edition (Precision Pro)</title>
+  <title>SPIKE Pi - Master Edition (Bluetooth)</title>
   <script src="https://unpkg.com/blockly/blockly_compressed.js"></script>
   <script src="https://unpkg.com/blockly/blocks_compressed.js"></script>
   <script src="https://unpkg.com/blockly/python_compressed.js"></script>
@@ -15,15 +15,14 @@
     #main { display: flex; flex: 1; overflow: hidden; background: #f0f0f0; }
     #blocklyDiv { flex: 2; border-right: 2px solid #ccc; }
     #sidePanel { flex: 1; display: flex; flex-direction: column; background: #1e1e1e; }
-    #codeContainer { flex: 1; padding: 15px; overflow: auto; font-family: 'Consolas', monospace; font-size: 11px; color: #d4d4d4; }
+    #codeContainer { flex: 1; padding: 15px; overflow: auto; font-family: 'Consolas', monospace; font-size: 14px; color: #d4d4d4; }
     #console { height: 150px; background: #000; padding: 10px; border-top: 2px solid #444; color: #0f0; font-family: monospace; overflow-y: auto; }
     .controls { display: flex; gap: 10px; align-items: center; }
-    input { padding: 8px; border-radius: 20px; border: none; text-align: center; font-weight: bold; }
     .btn { cursor: pointer; padding: 10px 20px; border: none; border-radius: 20px; font-weight: bold; text-transform: uppercase; }
     .btn-run { background: var(--spike-green); color: white; }
     .btn-stop { background: #E30613; color: white; }
+    .btn-conn { background: #007bff; color: white; }
     .btn:hover { opacity: 0.9; }
-    .label-tag { font-size: 0.7em; font-weight: bold; margin-right: 5px; color: #666; }
   </style>
 </head>
 <body>
@@ -33,8 +32,7 @@
     <div style="font-size: 1.8em; font-weight: 900;">SPIKE <span style="font-weight: 100;">Pi</span></div>
   </div>
   <div class="controls">
-    <span class="label-tag">ROBOT IP:</span>
-    <input type="text" id="pi_ip" value="192.168.2.250">
+    <button id="btnConnect" class="btn btn-conn" onclick="conectarBluetooth()">🔗 Connect Pi</button>
     <button class="btn btn-run" onclick="enviarAPi()">▶ Run</button>
     <button class="btn btn-stop" onclick="detenerRobot()">■ Stop</button>
   </div>
@@ -43,8 +41,11 @@
 <div id="main">
   <div id="blocklyDiv"></div>
   <div id="sidePanel">
-    <div id="codeContainer"><div style="color:var(--spike-yellow)">// PYTHON CODE (DMA Hardware Mode)</div><pre id="pythonCode"></pre></div>
-    <div id="console">> System ready...</div>
+    <div id="codeContainer">
+      <div style="color:var(--spike-yellow)">// PYTHON CODE (Librería Spike Pro)</div>
+      <pre id="pythonCode"></pre>
+    </div>
+    <div id="console">> System ready... Connect via Bluetooth.</div>
   </div>
 </div>
 
@@ -54,6 +55,8 @@
     <block type="motores_giro"></block>
     <block type="motor_individual"></block>
     <block type="motor_stop"></block>
+    <block type="leer_vueltas"></block>
+    <block type="reset_motor"></block>
   </category>
   <category name="Sensors" colour="60">
     <block type="sensor_distancia"></block>
@@ -67,12 +70,13 @@
   </category>
   <category name="Display" colour="300">
     <block type="print_console"></block>
+    <block type="text"></block>
   </category>
   <category name="Variables" colour="330" custom="VARIABLE"></category>
 </xml>
 
 <script>
-/* --- BLOCK DEFINITIONS --- */
+/* --- 1. DEFINICIÓN DE BLOQUES --- */
 Blockly.defineBlocksWithJsonArray([
   {
     "type": "motor_individual",
@@ -107,192 +111,122 @@ Blockly.defineBlocksWithJsonArray([
     ],
     "previousStatement": null, "nextStatement": null, "colour": 230
   },
+  { "type": "motor_stop", "message0": "Stop Movement", "previousStatement": null, "nextStatement": null, "colour": 230 },
+  
+  // NUEVOS BLOQUES DE ENCODERS
+  { "type": "leer_vueltas", "message0": "Motor %1 rotations", "args0": [{ "type": "field_dropdown", "name": "ID", "options": [["A","0"], ["B","1"]] }], "output": "Number", "colour": 230 },
+  { "type": "reset_motor", "message0": "Reset Motor %1", "args0": [{ "type": "field_dropdown", "name": "ID", "options": [["A","0"], ["B","1"]] }], "previousStatement": null, "nextStatement": null, "colour": 230 },
+  
+  // SENSORES Y CONTROL
   { "type": "sensor_distancia", "message0": "distance (cm)", "output": "Number", "colour": 60 },
   { "type": "esperar_distancia", "message0": "wait until distance < %1 cm", "args0": [{ "type": "field_number", "name": "DIST", "value": 10 }], "previousStatement": null, "nextStatement": null, "colour": 60 },
-  { "type": "motor_stop", "message0": "Stop Movement", "previousStatement": null, "nextStatement": null, "colour": 0 },
   { "type": "base_delay", "message0": "wait %1 sec", "args0": [{ "type": "field_number", "name": "SEC", "value": 1 }], "previousStatement": null, "nextStatement": null, "colour": 120 },
-  { "type": "print_console", "message0": "print to console %1", "args0": [{ "type": "field_input", "name": "TEXT", "text": "Hello Spike!" }], "previousStatement": null, "nextStatement": null, "colour": 300 }
+  
+  // BLOQUE PRINT MEJORADO (Ahora acepta conectar otros bloques redondos dentro)
+  { "type": "print_console", "message0": "print %1", "args0": [{ "type": "input_value", "name": "TEXT" }], "previousStatement": null, "nextStatement": null, "colour": 300 }
 ]);
 
+/* --- 2. TRADUCCIÓN A PYTHON --- */
 const pyGen = Blockly.Python;
+
 pyGen.forBlock['motor_individual'] = function(block) { return `robot_motor_maestro(${block.getFieldValue('ID')}, '${block.getFieldValue('DIR')}', ${block.getFieldValue('VALOR')}, '${block.getFieldValue('MODO')}', ${block.getFieldValue('SPEED')})\n`; };
 pyGen.forBlock['motores_dual'] = function(block) { return `robot_dual_maestro('${block.getFieldValue('DIR')}', ${block.getFieldValue('VALOR')}, '${block.getFieldValue('MODO')}', ${block.getFieldValue('SPEED')})\n`; };
 pyGen.forBlock['motores_giro'] = function(block) { return `robot_girar_maestro('${block.getFieldValue('SENTIDO')}', ${block.getFieldValue('GRADOS')}, ${block.getFieldValue('SPEED')})\n`; };
-pyGen.forBlock['motor_stop'] = function() { return "driver.MotorStop(0)\ndriver.MotorStop(1)\n"; };
+pyGen.forBlock['motor_stop'] = function() { return "apagar_todo()\n"; };
 pyGen.forBlock['base_delay'] = function(block) { return `time.sleep(${block.getFieldValue('SEC')})\n`; };
 pyGen.forBlock['sensor_distancia'] = function() { return ["get_distancia()", pyGen.ORDER_ATOMIC]; };
 pyGen.forBlock['esperar_distancia'] = function(block) { return `while get_distancia() > ${block.getFieldValue('DIST')}: time.sleep(0.05)\n`; };
-pyGen.forBlock['print_console'] = function(block) { return `print("${block.getFieldValue('TEXT')}")\n`; };
 
+// NUEVAS TRADUCCIONES DE ENCODERS
+pyGen.forBlock['leer_vueltas'] = function(block) { return [`motor_vueltas(${block.getFieldValue('ID')})`, pyGen.ORDER_ATOMIC]; };
+pyGen.forBlock['reset_motor'] = function(block) { return `reset_motor(${block.getFieldValue('ID')})\n`; };
+
+// TRADUCCIÓN PRINT MEJORADO
+pyGen.forBlock['print_console'] = function(block) { 
+  let msg = pyGen.valueToCode(block, 'TEXT', pyGen.ORDER_NONE) || '""';
+  return `print(${msg})\n`; 
+};
+
+/* --- 3. INYECTAR BLOCKLY Y ACTUALIZAR CÓDIGO --- */
 const workspace = Blockly.inject('blocklyDiv', { toolbox: document.getElementById('toolbox'), zoom: { controls: true, wheel: true }, trashcan: true });
 
 function updateCode() {
-  let header = `from MotorDriver import MotorDriver
-import pigpio
-import time
-import sys
-
-# DMA-based hardware encoder reader
-class PigpioEncoder:
-    def __init__(self, pi, pin_a, pin_b):
-        self.pi = pi; self.pin_a = pin_a; self.pin_b = pin_b; self.pos = 0
-        self.pi.set_mode(pin_a, pigpio.INPUT); self.pi.set_mode(pin_b, pigpio.INPUT)
-        self.pi.set_pull_up_down(pin_a, pigpio.PUD_UP); self.pi.set_pull_up_down(pin_b, pigpio.PUD_UP)
-        self.levA = self.pi.read(pin_a); self.levB = self.pi.read(pin_b)
-        self.cbA = self.pi.callback(pin_a, pigpio.EITHER_EDGE, self._cb)
-        self.cbB = self.pi.callback(pin_b, pigpio.EITHER_EDGE, self._cb)
-    def _cb(self, gpio, level, tick):
-        if level == pigpio.TIMEOUT: return
-        if gpio == self.pin_a:
-            self.levA = level
-            if level == self.levB: self.pos += 1
-            else: self.pos -= 1
-        else:
-            self.levB = level
-            if level != self.levA: self.pos += 1
-            else: self.pos -= 1
-    @property
-    def steps(self): return self.pos
-
-# Initialization
-pi = pigpio.pi()
-if not pi.connected: sys.exit("Error: pigpiod service not running.")
-driver = MotorDriver()
-enc_a = PigpioEncoder(pi, 16, 17)
-enc_b = PigpioEncoder(pi, 5, 6)
-
-# ========================================================
-# ⚙️ CALIBRATION CONSTANTS
-# ========================================================
-PULSOS_POR_VUELTA = 5892.0  
-GIRO_180_VUELTAS = 1.19  
-POT_MIN = 25
-# ========================================================
-
-def get_distancia(): return 999 
-def map_speed(s): return int(30 + (s - 1) * (70 / 9))
-
-def robot_dual_maestro(dir, valor, modo, spike_speed):
-    p_base = map_speed(spike_speed)
-    da = 'forward' if dir == 'forward' else 'backward'
-    db = 'backward' if dir == 'forward' else 'forward'
-    
-    if modo == 'SEG':
-        driver.MotorRun(0, da, p_base); driver.MotorRun(1, db, p_base)
-        time.sleep(valor); driver.MotorStop(0); driver.MotorStop(1); return
-
-    ini_a, ini_b = enc_a.steps, enc_b.steps
-    objetivo = int(valor * PULSOS_POR_VUELTA)
-
-    last_ca, last_cb = -1, -1
-    driver.MotorRun(0, da, p_base); driver.MotorRun(1, db, p_base)
-    
-    while True:
-        pa, pb = abs(enc_a.steps - ini_a), abs(enc_b.steps - ini_b)
-        actual = max(pa, pb)
-        restante = objetivo - actual
-        
-        if restante <= 0: break
-        
-        # Braking ramp
-        p_act = p_base
-        if restante < 3000:
-            p_act = int(POT_MIN + (p_base - POT_MIN) * (restante/3000))
-        
-        # PID Synchronization
-        diff = pa - pb
-        corr = int(diff * 0.05) 
-        
-        ca = max(min(p_act - corr, 100), POT_MIN)
-        cb = max(min(p_act + corr, 100), POT_MIN)
-        
-        if abs(ca - last_ca) > 2 or abs(cb - last_cb) > 2:
-            driver.MotorRun(0, da, ca)
-            driver.MotorRun(1, db, cb)
-            last_ca, last_cb = ca, cb
-            
-        time.sleep(0.01)
-        
-    driver.MotorStop(0); driver.MotorStop(1)
-
-def robot_girar_maestro(sentido, grados, speed):
-    p_base = map_speed(speed)
-    
-    # Correct direction setup
-    if sentido == 'derecha':
-        da = 'backward'
-        db = 'backward'
-    else:
-        da = 'forward'
-        db = 'forward'
-    
-    ini_a, ini_b = enc_a.steps, enc_b.steps
-    
-    # Calibration formula
-    vueltas_motor = grados * (GIRO_180_VUELTAS / 180.0)
-    objetivo = int(vueltas_motor * PULSOS_POR_VUELTA)
-    
-    last_p = -1
-    driver.MotorRun(0, da, p_base); driver.MotorRun(1, db, p_base)
-    
-    while True:
-        pa, pb = abs(enc_a.steps - ini_a), abs(enc_b.steps - ini_b)
-        actual = max(pa, pb)
-        restante = objetivo - actual
-        if restante <= 0: break
-        
-        p_act = p_base
-        if restante < 2000:
-            p_act = int(POT_MIN + (p_base - POT_MIN) * (restante/2000))
-            
-        if abs(p_act - last_p) > 2:
-            driver.MotorRun(0, da, max(p_act, POT_MIN))
-            driver.MotorRun(1, db, max(p_act, POT_MIN))
-            last_p = p_act
-        time.sleep(0.01)
-    driver.MotorStop(0); driver.MotorStop(1)
-
-def robot_motor_maestro(id, dir, valor, modo, spike_speed):
-    p_max = map_speed(spike_speed)
-    if modo == 'SEG':
-        driver.MotorRun(id, dir, p_max); time.sleep(valor); driver.MotorStop(id); return
-    ini = enc_a.steps if id == 0 else enc_b.steps
-    obj = int(valor * PULSOS_POR_VUELTA)
-    while True:
-        actual = abs((enc_a.steps if id == 0 else enc_b.steps) - ini)
-        restante = obj - actual
-        if restante <= 0: break
-        p = p_max
-        if restante < 3000:
-            p = int(POT_MIN + (p_max - POT_MIN) * (restante/3000))
-        driver.MotorRun(id, dir, max(p, POT_MIN))
-        time.sleep(0.01)
-    driver.MotorStop(id)
-
-try:
-`;
+  // Ahora el Header es super corto porque todo el código gordo está en la Pi
+  let header = `from spike_pro import *\n\ntry:\n`;
+  
   let body = pyGen.workspaceToCode(workspace);
   body = !body.trim() ? "    pass\n" : body.split('\n').map(l => l.trim() ? "    " + l : "").join('\n');
-  document.getElementById('pythonCode').innerText = header + body + `\nfinally:\n    driver.MotorStop(0); driver.MotorStop(1)\n    pi.stop()\n    print("FINISHED")`;
+  
+  let footer = `\nfinally:\n    apagar_todo()\n    print("FINISHED")`;
+  
+  document.getElementById('pythonCode').innerText = header + body + footer;
 }
 
 workspace.addChangeListener(updateCode);
 updateCode();
 
-async function enviarAPi() {
-  const ip = document.getElementById('pi_ip').value;
-  const code = document.getElementById('pythonCode').innerText;
-  log(`Sending to ${ip}...`);
+/* --- 4. COMUNICACIÓN BLUETOOTH (CHUNKS) --- */
+let bleCharacteristic = null;
+const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+
+async function conectarBluetooth() {
   try {
-    const res = await fetch(`http://${ip}:5000/run`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({code}) });
-    log("Response: " + await res.text());
-  } catch (e) { log("Connection error."); }
+    log("Searching for SpikePi...");
+    const bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'SpikePi' }],
+      optionalServices: [SERVICE_UUID]
+    });
+
+    log("Connecting to GATT server...");
+    const server = await bleDevice.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    bleCharacteristic = await service.getCharacteristic(RX_UUID);
+    
+    document.getElementById('btnConnect').innerText = "✅ Connected";
+    document.getElementById('btnConnect').style.background = "var(--spike-green)";
+    log("Bluetooth Connected Successfully!");
+  } catch (error) {
+    log("Error connecting: " + error);
+  }
 }
+
+async function enviarAPi() {
+  if (!bleCharacteristic) {
+    alert("Please connect to Bluetooth first!");
+    return;
+  }
+  
+  const code = document.getElementById('pythonCode').innerText;
+  const encoder = new TextEncoder();
+  
+  try {
+    log("Sending clean code via BLE...");
+    
+    await bleCharacteristic.writeValue(encoder.encode("==START=="));
+    
+    const chunkSize = 150;
+    for (let i = 0; i < code.length; i += chunkSize) {
+      const chunk = code.substring(i, i + chunkSize);
+      await bleCharacteristic.writeValue(encoder.encode(chunk));
+      await new Promise(resolve => setTimeout(resolve, 40));
+    }
+    
+    await bleCharacteristic.writeValue(encoder.encode("==END=="));
+    log("Code executed!");
+  } catch (e) {
+    log("Send error: " + e);
+  }
+}
+
 async function detenerRobot() {
-  const ip = document.getElementById('pi_ip').value;
-  log("Stopping...");
-  try { await fetch(`http://${ip}:5000/stop`, { method: 'POST' }); } catch (e) {}
+  if (bleCharacteristic) {
+    const encoder = new TextEncoder();
+    await bleCharacteristic.writeValue(encoder.encode("STOP"));
+    log("Stop command sent.");
+  }
 }
+
 function log(msg) {
   const con = document.getElementById('console');
   con.innerHTML += `<div>> ${msg}</div>`;
